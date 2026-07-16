@@ -413,6 +413,23 @@ export interface SARDraft {
   narrative_error: string | null
 }
 
+/**
+ * The result of one monitoring cycle. Deliberately a thin view of the backend's
+ * MonitoringCycleResult -- enough to prove which providers actually ran and what
+ * the deterministic engine scored, which is what the live-screening demo shows.
+ */
+export interface MonitorCycleResult {
+  client_id: number
+  external_client_id: number | null
+  signals_collected: number
+  new_events: number
+  alerts_created: number
+  providers_queried: string[]
+  provider_failures: string[]
+  risk: { score: number; band: string } | null
+  error: string | null
+}
+
 export interface ActionRequirement {
   action: ReviewAction
   /** If true, the review MUST carry target_id or the server rejects it. */

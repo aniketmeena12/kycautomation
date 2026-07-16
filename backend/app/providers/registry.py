@@ -19,7 +19,10 @@ from dataclasses import dataclass
 
 from app.core.enums import ProviderCategory, ProviderKind
 from app.providers.contracts import CATEGORY_PROTOCOLS
+from app.core.config import get_settings
 from app.providers.local_adverse_media_provider import LocalCuratedAdverseMediaProvider
+from app.providers.newsdata_adverse_media_provider import NewsdataAdverseMediaProvider
+from app.providers.opensanctions_api_provider import OpenSanctionsAPIProvider
 from app.providers.local_sanctions_provider import LocalCuratedSanctionsProvider
 from app.providers.pending_api_provider import (
     PendingAdverseMediaAPIProvider,
@@ -81,12 +84,28 @@ def build_default_registry() -> ProviderRegistry:
     all queryable through the identical ProviderResult[ExternalEntityCandidate]
     contract -- see docs/phase-2-ingestion.md SS3."""
     registry = ProviderRegistry()
+    settings = get_settings()
     registry.register(ProviderCategory.SANCTIONS, LocalCuratedSanctionsProvider())
     registry.register(ProviderCategory.SANCTIONS, Tier1OfacLookupProvider())
     registry.register(ProviderCategory.SANCTIONS, Tier1OpenSanctionsLookupProvider())
-    registry.register(ProviderCategory.SANCTIONS, PendingSanctionsAPIProvider())
+    # Sanctions graduates the same way adverse media did: the live OpenSanctions
+    # match API when a key is present, the honest placeholder otherwise. The real
+    # provider is gated as EXPENSIVE (candidates.py), so registering it here does
+    # not mean a routine cycle calls it -- only an explicit opt-in does.
+    if settings.sanctions_api_key:
+        registry.register(ProviderCategory.SANCTIONS, OpenSanctionsAPIProvider(settings))
+    else:
+        registry.register(ProviderCategory.SANCTIONS, PendingSanctionsAPIProvider())
     registry.register(ProviderCategory.ADVERSE_MEDIA, LocalCuratedAdverseMediaProvider())
-    registry.register(ProviderCategory.ADVERSE_MEDIA, PendingAdverseMediaAPIProvider())
+    # Adverse media graduates from placeholder to live integration when a key is
+    # present. With NEWS_API_KEY set, the real newsdata.io provider runs; without
+    # it, the honest placeholder that reports NOT_CONFIGURED runs instead. Only
+    # one of the two is ever registered, so an operator never sees both a live
+    # provider and its own stand-in claiming the same slot.
+    if settings.news_api_key:
+        registry.register(ProviderCategory.ADVERSE_MEDIA, NewsdataAdverseMediaProvider(settings))
+    else:
+        registry.register(ProviderCategory.ADVERSE_MEDIA, PendingAdverseMediaAPIProvider())
     registry.register(ProviderCategory.CORPORATE_REGISTRY, PendingCorporateRegistryProvider())
     registry.register(ProviderCategory.TRANSACTION, SamlDTransactionProvider())
     return registry

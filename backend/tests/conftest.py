@@ -33,7 +33,20 @@ os.environ["DATABASE_URL"] = f"sqlite:///{_TEST_DB_PATH}"
 #
 # Empty string, not deletion: an empty value still overrides the .env file,
 # whereas deleting the key from os.environ would let the file's value through.
-for _secret in ("LLM_API_KEY", "ANTHROPIC_API_KEY", "GROQ_API_KEY"):
+# The same reasoning now extends to the external-data APIs. Once the news and
+# sanctions providers became REAL integrations (they were placeholders when
+# ADR-031 was written), a live key in .env would make the suite hit those
+# vendors on every run -- and the OpenSanctions trial is 50 requests/MONTH, so
+# a single unguarded test run could exhaust a reviewer's entire quota. Blank
+# them for exactly the same reason, and by exactly the same mechanism.
+for _secret in (
+    "LLM_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "GROQ_API_KEY",
+    "NEWS_API_KEY",
+    "SANCTIONS_API_KEY",
+    "CORPORATE_REGISTRY_API_KEY",
+):
     os.environ[_secret] = ""
 
 # Pin the provider too, so a developer's LLM_PROVIDER choice cannot change what

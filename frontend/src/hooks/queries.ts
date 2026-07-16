@@ -256,11 +256,17 @@ export function useOpenCase() {
 export function useMonitorClient(caseId?: number) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (externalClientId: number) => api.monitorClient(externalClientId),
+    // `allowExpensive` opts this one run into the live external APIs (the
+    // OpenSanctions match API is gated behind it, being 50 req/mo). Off by
+    // default, so the ordinary "run a cycle" button never spends quota; the
+    // live-screening demo passes it explicitly.
+    mutationFn: (vars: { externalClientId: number; allowExpensive?: boolean }) =>
+      api.monitorClient(vars.externalClientId, { allowExpensive: vars.allowExpensive }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["cases"] })
       qc.invalidateQueries({ queryKey: ["risk"] })
       qc.invalidateQueries({ queryKey: ["alerts"] })
+      qc.invalidateQueries({ queryKey: ["customer360"] })
       qc.invalidateQueries({ queryKey: keys.caseMetrics })
       if (caseId !== undefined) {
         qc.invalidateQueries({ queryKey: keys.case(caseId) })

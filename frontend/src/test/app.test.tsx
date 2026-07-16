@@ -21,12 +21,19 @@ import { ApiError } from "@/api/client"
 import { EmptyState, ErrorState, LoadingBlock } from "@/components/ui"
 import { GroundingIndicator, RiskBadge, StatusChip, TierBadge } from "@/components/domain"
 import { fmtOrDash, humanize } from "@/lib/utils"
+import { SessionProvider } from "@/lib/session"
 
 function wrap(ui: React.ReactNode, route = "/") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
+  // SessionProvider is part of the app's real provider tree now that pages
+  // attribute actions to a signed-in reviewer. Tests render with no stored
+  // session (the default), which is the honest "not signed in" state -- pages
+  // must still render, just with an empty reviewer field.
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={[route]}>{ui}</MemoryRouter>
+      <SessionProvider>
+        <MemoryRouter initialEntries={[route]}>{ui}</MemoryRouter>
+      </SessionProvider>
     </QueryClientProvider>,
   )
 }

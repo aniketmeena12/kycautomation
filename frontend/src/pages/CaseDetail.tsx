@@ -32,6 +32,7 @@ import { EvidenceCard, RiskBadge, StatusChip } from "@/components/domain"
 import { useCase, useGenerateSar, useMonitorClient, useSubmitReview } from "@/hooks/queries"
 import { fmtDateTime, humanize } from "@/lib/utils"
 import type { ActionRequirement, CaseDetail, ReviewAction } from "@/api/types"
+import { useSession } from "@/lib/session"
 import { Page } from "./Dashboard"
 
 /**
@@ -63,8 +64,13 @@ export default function CaseDetailPage() {
   const review = useSubmitReview(id)
   const sar = useGenerateSar(id)
   const monitor = useMonitorClient(id)
+  const { session } = useSession()
 
-  const [reviewer, setReviewer] = useState("")
+  // Pre-filled from the signed-in identity, but still a plain editable field:
+  // the name that lands in the audit trail is whatever is in the box at submit
+  // time, and a reviewer acting on someone else's behalf must be able to say so.
+  // The backend remains the authority -- it rejects an empty reviewer.
+  const [reviewer, setReviewer] = useState(session?.name ?? "")
   const [action, setAction] = useState<ReviewAction | "">("")
   const [comment, setComment] = useState("")
   const [targetId, setTargetId] = useState("")
@@ -80,6 +86,9 @@ export default function CaseDetailPage() {
   const detail = query.data!
   const c = detail.case
   const rule = requirementFor(detail, action)
+  // A score is the proof a cycle actually ran. Every "nothing found" claim on
+  // this page is gated on it, because without a run there IS no finding.
+  const monitored = detail.risk_current !== null && detail.risk_current !== undefined
   // No rule found for a chosen action means the backend didn't declare one
   // (older build). Ask for the target rather than silently omitting it.
   const needsTarget = action ? (rule ? rule.requires_target : true) : false
@@ -144,7 +153,7 @@ export default function CaseDetailPage() {
                   description="This client has never been scored, so there is nothing to show yet. Running a monitoring cycle scores it deterministically from the config-driven risk engine -- no model is involved."
                   action={
                     <div className="space-y-2">
-                      <Button size="sm" onClick={() => monitor.mutate(c.external_client_id)} disabled={monitor.isPending}>
+                      <Button size="sm" onClick={() => monitor.mutate({ externalClientId: c.external_client_id })} disabled={monitor.isPending}>
                         <Activity className="h-3.5 w-3.5" />
                         {monitor.isPending ? "Running monitoring cycle..." : "Run monitoring cycle"}
                       </Button>
@@ -175,7 +184,14 @@ export default function CaseDetailPage() {
             </CardHeader>
             <CardContent className="space-y-2">
               {detail.investigations.length === 0 ? (
-                <EmptyState title="No investigations" />
+                <EmptyState
+                  title="No investigations"
+                  description={
+                    monitored
+                      ? "No investigation has been run for this client. Investigations are the only step that calls a language model, and they are triggered explicitly -- from Customer 360, or by an alert."
+                      : "Nothing has run for this client yet. Score it first with a monitoring cycle above."
+                  }
+                />
               ) : (
                 detail.investigations.map((i) => (
                   <Link
@@ -201,8 +217,19 @@ export default function CaseDetailPage() {
               <CardTitle>Evidence ({detail.evidence.length})</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
+              {/* "We looked and found nothing" and "we never looked" are
+                  different facts, and the backend is careful to distinguish
+                  them (NO_RESULTS vs NOT_CONFIGURED). Rendering one empty box
+                  for both would discard that. */}
               {detail.evidence.length === 0 ? (
-                <EmptyState title="No evidence on file" />
+                <EmptyState
+                  title="No evidence on file"
+                  description={
+                    monitored
+                      ? "Screening ran and returned nothing to attach. Evidence is only recorded when a provider actually produces a hit -- nothing is manufactured to fill this panel."
+                      : "No check has run yet, so this is not a finding of 'nothing found'. Run a monitoring cycle above."
+                  }
+                />
               ) : (
                 detail.evidence.slice(0, 6).map((e) => <EvidenceCard key={e.id} evidence={e} />)
               )}
@@ -215,10 +242,22 @@ export default function CaseDetailPage() {
               <CardTitle>Entity matches</CardTitle>
             </CardHeader>
             <CardContent>
+              {/* Zero matches on a real client is a RESULT, and a measured one.
+                  Phase 0 screened all 2,000 clients against the authoritative
+                  lists and corroborated 0 -- the client master carries no DOB,
+                  nationality or identifier, so a name-only hit cannot be
+                  confirmed and must not be presented as one. Saying so is the
+                  point: an empty panel that looks like a gap invites someone to
+                  "fix" it by loosening the threshold, which is how false
+                  positives get manufactured. */}
               {detail.entity_matches.length === 0 ? (
                 <EmptyState
                   title="No entity matches"
-                  description="Confirming or rejecting a match is a human action and needs the match id."
+                  description={
+                    monitored
+                      ? "Screening ran and corroborated nothing. The client master carries no date of birth, nationality or identifier, so a name-only hit against the sanctions lists cannot be corroborated and is not raised as a match. Phase 0 measured this across all 2,000 clients: 0 corroborated. This is the expected result, not a missing feature."
+                      : "No screening has run yet. Run a monitoring cycle above."
+                  }
                 />
               ) : (
                 <ul className="space-y-1.5">

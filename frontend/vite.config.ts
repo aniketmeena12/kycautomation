@@ -9,8 +9,13 @@ export default defineConfig({
     port: 5173,
     // The backend is same-origin in dev, so the app never needs CORS or a
     // hardcoded host. VITE_API_URL overrides for a deployed split origin.
-    proxy: { "/api": { target: "http://localhost:8000", changeOrigin: true },
-             "/health": { target: "http://localhost:8000", changeOrigin: true } },
+    // BACKEND_URL overrides the dev proxy target -- useful when port 8000 is
+    // occupied (e.g. an orphaned socket) and the backend runs on another port:
+    //   BACKEND_URL=http://localhost:8001 npm run dev
+    proxy: {
+      "/api": { target: process.env.BACKEND_URL ?? "http://localhost:8000", changeOrigin: true },
+      "/health": { target: process.env.BACKEND_URL ?? "http://localhost:8000", changeOrigin: true },
+    },
   },
   test: {
     // The forks pool times out on this repo's path; threads is reliable here.

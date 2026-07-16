@@ -38,6 +38,7 @@ import { GroundingIndicator } from "@/components/domain"
 import { ApiError } from "@/api/client"
 import { useCase, useCases, useSar, useSubmitReview } from "@/hooks/queries"
 import { fmtDateTime, humanize } from "@/lib/utils"
+import { useSession } from "@/lib/session"
 import { Page } from "./Dashboard"
 
 export default function SarPage() {
@@ -48,8 +49,12 @@ export default function SarPage() {
   const sar = useSar(selected)
   const detail = useCase(selected)
   const review = useSubmitReview(selected ?? 0)
+  const { session } = useSession()
 
-  const [reviewer, setReviewer] = useState("")
+  // Prefilled from the signed-in reviewer; still editable, because the name on
+  // a SAR approval is the accountable human's, and the backend is the authority
+  // that rejects an empty one.
+  const [reviewer, setReviewer] = useState(session?.name ?? "")
   const [notes, setNotes] = useState("")
   const [editing, setEditing] = useState(false)
 

@@ -32,16 +32,19 @@ import {
 } from "@/components/ui"
 import { ActorChip, EvidenceCard, ProviderBadge, RiskBadge, TierBadge } from "@/components/domain"
 import {
+  useAgentStatus,
   useAlerts,
   useCurrentRisk,
   useCustomer360,
   useInvestigationsForClient,
+  useMonitorClient,
   useOpenCase,
   useRiskEvents,
   useRiskHistory,
+  useRunInvestigation,
 } from "@/hooks/queries"
 import { fmtDateTime, fmtOrDash, humanize } from "@/lib/utils"
-import type { FactorContribution } from "@/api/types"
+import type { FactorContribution, MonitorCycleResult } from "@/api/types"
 import { Page } from "./Dashboard"
 
 export default function Customer360Page() {
@@ -56,6 +59,9 @@ export default function Customer360Page() {
   const investigations = useInvestigationsForClient(externalId)
   const alerts = useAlerts({ client_id: id, limit: 20 })
   const openCase = useOpenCase()
+  const agent = useAgentStatus()
+  const runInvestigation = useRunInvestigation()
+  const liveScreen = useMonitorClient()
 
   const contributions = useMemo<FactorContribution[]>(() => {
     const raw = risk.data?.current?.factor_contributions
@@ -117,6 +123,20 @@ export default function Customer360Page() {
           </Link>
         </div>
       ) : null}
+
+      {/* Live external-API screening -- the deliberate, opt-in demo path.
+          The ordinary monitoring cycle uses only local data; THIS run also
+          calls the live newsdata.io and OpenSanctions APIs. OpenSanctions is a
+          50-request/month trial, so this is explicit and clearly costed, never
+          a background action. */}
+      <LiveScreeningPanel
+        externalClientId={client.external_client_id}
+        pending={liveScreen.isPending}
+        result={liveScreen.data ?? null}
+        error={liveScreen.isError ? (liveScreen.error as Error).message : null}
+        onRun={() => liveScreen.mutate({ externalClientId: client.external_client_id, allowExpensive: true })}
+      />
+
 
       <div className="grid gap-3 lg:grid-cols-3">
         {/* ------------------------------------------------ profile */}
@@ -358,6 +378,45 @@ export default function Customer360Page() {
             <CardTitle>Investigations</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
+            {/* The ONLY place a language model is invoked in this entire
+                system. It reads context and explains; it never scores, never
+                resolves an entity, and never decides -- so triggering it is
+                safe, and gating it behind curl only made the product's one AI
+                step invisible. The agent's configured state comes from the
+                backend: an unconfigured agent must say so rather than fail on
+                click. */}
+            <div className="flex flex-wrap items-center gap-2 rounded border bg-muted/40 p-2">
+              <Button
+                size="sm"
+                disabled={runInvestigation.isPending || agent.data?.configured === false}
+                onClick={() =>
+                  runInvestigation.mutate({
+                    externalClientId: externalId,
+                    reason: `Manual investigation requested from Customer 360 for client ${externalId}.`,
+                  })
+                }
+              >
+                <Bot className="h-3.5 w-3.5" />
+                {runInvestigation.isPending ? "Agent running..." : "Run investigation"}
+              </Button>
+              <span className="text-[10px] text-muted-foreground">
+                {agent.data?.configured === false
+                  ? agent.data?.note
+                  : `${agent.data?.provider ?? "agent"} / ${agent.data?.model ?? "?"} - explains only; the score stays deterministic.`}
+              </span>
+            </div>
+            {runInvestigation.isError ? (
+              <ErrorState title="Investigation failed" detail={(runInvestigation.error as Error).message} />
+            ) : null}
+            {runInvestigation.isSuccess ? (
+              <p className="rounded border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-800">
+                Investigation #{runInvestigation.data.investigation.id} finished:{" "}
+                {humanize(runInvestigation.data.investigation.status)}.{" "}
+                <Link className="underline" to={`/investigations/${runInvestigation.data.investigation.id}`}>
+                  Open the report
+                </Link>
+              </p>
+            ) : null}
             {investigations.isLoading ? (
               <LoadingBlock label="Loading investigations" />
             ) : investigations.data?.investigations.length ? (
@@ -379,7 +438,7 @@ export default function Customer360Page() {
               <EmptyState
                 icon={Bot}
                 title="No investigations"
-                description="Open a case and run an investigation from the case workspace."
+                description="Nothing has been investigated for this client yet. Use the button above -- the agent reads this client's stored context and writes a grounded, cited report."
               />
             )}
           </CardContent>
@@ -422,5 +481,95 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
       <span className="text-muted-foreground">{label}</span>
       <span className="font-medium">{value}</span>
     </div>
+  )
+}
+
+/** The provider names that reach a paid/live third-party API. Used only to
+ *  LABEL the run honestly -- the gating itself lives in the backend. */
+const LIVE_API_PROVIDERS = new Set(["newsdata_adverse_media_api", "opensanctions_match_api"])
+
+function LiveScreeningPanel({
+  externalClientId,
+  pending,
+  result,
+  error,
+  onRun,
+}: {
+  externalClientId: number
+  pending: boolean
+  result: MonitorCycleResult | null
+  error: string | null
+  onRun: () => void
+}) {
+  const queried = result?.providers_queried ?? []
+  const liveHit = queried.filter((p) => LIVE_API_PROVIDERS.has(p))
+  return (
+    <Card className="border-amber-200 bg-amber-50/40">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-amber-900">
+          <Radar className="h-4 w-4" /> Live external screening
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <p className="text-xs text-muted-foreground">
+          Runs one monitoring cycle for client {externalClientId} that also calls the <strong>live</strong>{" "}
+          newsdata.io and OpenSanctions APIs — not just local data. The OpenSanctions trial is 50 requests/month, so
+          this is deliberate and clearly costed; the ordinary cycle never touches it.
+        </p>
+        <Button size="sm" onClick={onRun} disabled={pending}>
+          <Radar className="h-3.5 w-3.5" />
+          {pending ? "Screening against live APIs..." : "Run live screening"}
+        </Button>
+
+        {error ? <ErrorState title="Live screening failed" detail={error} /> : null}
+
+        {result ? (
+          <div className="space-y-2 rounded border bg-card p-2 text-xs">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-muted-foreground">Providers queried:</span>
+              {queried.length === 0 ? (
+                <span className="text-muted-foreground">none</span>
+              ) : (
+                queried.map((p) => (
+                  <Badge key={p} variant={LIVE_API_PROVIDERS.has(p) ? "warning" : "muted"}>
+                    {LIVE_API_PROVIDERS.has(p) ? "LIVE " : ""}
+                    {p}
+                  </Badge>
+                ))
+              )}
+            </div>
+            {liveHit.length > 0 ? (
+              <p className="text-emerald-700">
+                Live API(s) fired: {liveHit.join(", ")}. Results (articles, sanctions candidates, any corroborated
+                evidence) are reflected in the panels below and in the deterministic score.
+              </p>
+            ) : (
+              <p className="text-muted-foreground">
+                No live-API provider ran — the key may be unset on the server, or the run stayed local. Restart the
+                backend after setting NEWS_API_KEY / SANCTIONS_API_KEY.
+              </p>
+            )}
+            {result.provider_failures.length > 0 ? (
+              <p className="text-amber-700">Provider notes: {result.provider_failures.join("; ")}</p>
+            ) : null}
+            <div className="flex flex-wrap gap-3 pt-1">
+              <span>
+                Score:{" "}
+                <strong>{result.risk ? `${result.risk.score} / ${result.risk.band}` : "unchanged"}</strong>
+              </span>
+              <span>
+                New events: <strong>{result.new_events}</strong>
+              </span>
+              <span>
+                Alerts: <strong>{result.alerts_created}</strong>
+              </span>
+              <span>
+                Signals: <strong>{result.signals_collected}</strong>
+              </span>
+            </div>
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
   )
 }

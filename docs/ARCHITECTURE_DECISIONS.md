@@ -1021,3 +1021,66 @@ This mirrors the append-only discipline used throughout: risk events have no
 `update` (Phase 4), investigations are never mutated on re-run (ADR-029),
 reviews are never overwritten (brief SS4), and audit rows have no delete. Phase
 6's contribution is applying it to the lifecycle itself.
+
+## ADR-038: The news adverse-media provider becomes a real, live integration
+
+**Phase:** 8 (post-frontend) **Status:** Accepted
+
+**Context:** The three external-API providers (`pending_news_api`,
+`pending_sanctions_api`, `pending_corporate_registry_api`) shipped as honest
+placeholders that made **zero network calls** and reported `NOT_CONFIGURED`
+(ADR is Phase 1's no-fake-functionality principle). Their module docstring
+explicitly framed them as "an exact class to replace, with the config plumbing
+already wired" for a future phase. A real `newsdata.io` key arrived; the future
+phase is now.
+
+**Decision:** Add `NewsdataAdverseMediaProvider` (its own module), a real
+`AdverseMediaProvider` that queries `newsdata.io` over `httpx` and maps the
+response into the existing `ExternalArticle` envelope. The registry registers it
+**instead of** the placeholder when `NEWS_API_KEY` is set, and the placeholder
+otherwise — exactly one of the two ever holds the slot. Provenance is
+`SourceTier.EXTERNAL_LIVE`, never a curated tier. Every failure branch
+(`NOT_CONFIGURED`/`NO_RESULTS`/`RATE_LIMITED`/`TIMEOUT`/`ERROR`) returns a
+`ProviderResult` with an honest status, so a newsdata outage records weight-0
+coverage rather than raising a client's risk for our own failure (ADR-021).
+
+**Consequences:** This is the first time the "the three external APIs make zero
+network calls" statement in CLAUDE.md stops being universally true — it is now
+false for news specifically, and CLAUDE.md is updated to say so. The invariant
+that mattered was never "no network" for its own sake; it was "never fabricate,
+degrade honestly." That still holds: a live article is tier-tagged as live, and
+an absent key still degrades to the placeholder. Tests remain network-free — the
+provider is tested with an injected `httpx` response, and `conftest.py` now
+blanks `NEWS_API_KEY` alongside the LLM keys (extending ADR-031) so a real key in
+`.env` can never make the suite go live. Verified once by hand against the real
+API (10 `EXTERNAL_LIVE` articles); that call is a live verification, not a test.
+
+## ADR-039: The sanctions API is live but EXPENSIVE-gated (a 50/month budget)
+
+**Phase:** 8 (post-frontend) **Status:** Accepted
+
+**Context:** An OpenSanctions **matching API** key arrived — distinct from the
+488 MB OpenSanctions bulk CSV we already stream (`tier1_opensanctions_lookup`).
+The matching API returns scored candidates for a name. Its trial is **50
+requests per month**: here "expensive" is not ~40s of CPU (as it is for the bulk
+lookup) but a hard monthly budget that a single bulk sweep of 2,000 clients would
+exhaust instantly.
+
+**Decision:** Add `OpenSanctionsAPIProvider` (real `/match` call over `httpx`,
+`EXTERNAL_LIVE` provenance) and register it in place of `pending_sanctions_api`
+when `SANCTIONS_API_KEY` is set. Crucially, add its name to
+`candidates.EXPENSIVE_PROVIDERS` — the same gate that already protects the
+streaming lookup — so it fires **only** when a caller passes
+`allow_expensive_providers=True`. Routine monitoring never calls it; a deliberate
+"live screening" action does. The vendor's `score`/`match` are carried as
+provenance text only and never become confidence — the deterministic resolution
+scorers decide that, from actual field overlap (the candidate schema has no score
+field, which is the structural guarantee).
+
+**Consequences:** The live sanctions API is demonstrable on one case without any
+risk of a background run draining the quota. `conftest.py` blanks
+`SANCTIONS_API_KEY` too, so the suite can never spend a request — the ADR-031
+lesson, now with real money (quota) behind it. The provider batches a Person and
+a LegalEntity query into one billed request to keep recall high per call. Two
+live calls were spent verifying the contract and the end-to-end path; both are
+recorded as live verification, not tests.

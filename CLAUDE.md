@@ -243,9 +243,29 @@ way — every other component is deterministic, and that is the product's core c
 
 The `anthropic` and `groq` SDKs are **optional** dependencies, imported lazily inside their
 providers' methods (ADR-023) — the app and the whole suite run with both uninstalled. Never move
-those imports to module scope. The three *other* external-API providers (`NEWS_API_KEY`, `SANCTIONS_API_KEY`,
-`CORPORATE_REGISTRY_API_KEY`) still make **zero network calls** and honestly report
-`NOT_CONFIGURED` — placeholders, not integrations. Don't let them pretend otherwise.
+those imports to module scope.
+
+**Two of the three external-API placeholders are now REAL, live integrations (ADR-038/039).** This
+updates the older claim that all three make zero network calls — that is no longer true for news
+or sanctions:
+
+- **`newsdata_adverse_media_api`** (`NEWS_API_KEY`) — live adverse-media screening via `newsdata.io`
+  over `httpx`. Registered *instead of* `pending_news_api` when the key is set. `EXTERNAL_LIVE`
+  provenance. Always-on when a provider run is requested (newsdata's free tier is generous).
+- **`opensanctions_match_api`** (`SANCTIONS_API_KEY`) — live sanctions matching via the OpenSanctions
+  `/match` API. Registered *instead of* `pending_sanctions_api` when the key is set. **Gated as
+  EXPENSIVE** (`candidates.EXPENSIVE_PROVIDERS`): the trial is **50 requests/month**, so it fires
+  ONLY on `allow_expensive_providers=True` — the deliberate, one-case "live screening" demo, never a
+  routine cycle. The vendor score/match are provenance only; the deterministic scorer decides
+  confidence.
+- **`pending_corporate_registry_api`** (`CORPORATE_REGISTRY_API_KEY`) — still a placeholder: zero
+  network calls, honest `NOT_CONFIGURED`. Don't let it pretend otherwise.
+
+Both live providers use `httpx` (a hard dependency, not lazy). `conftest.py` blanks `NEWS_API_KEY`,
+`SANCTIONS_API_KEY`, and `CORPORATE_REGISTRY_API_KEY` alongside the LLM keys (extending ADR-031), so
+a real key in `.env` can never make the suite go live or spend the OpenSanctions quota. Both
+integrations are network-free in tests (injected `httpx` responses) and were each verified once by
+hand against the real API. See `docs/datasets.md` and `.env.example` for keys.
 
 ---
 

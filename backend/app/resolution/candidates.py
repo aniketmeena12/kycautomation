@@ -43,9 +43,15 @@ from app.services.provider_execution_service import ProviderExecutionService
 MIN_TOKEN_LENGTH = 3
 DEFAULT_DB_CANDIDATE_LIMIT = 200
 
-# Measured at ~40-45s per query over 1.3M rows (docs/phase-2-ingestion.md SS3).
+# Providers a routine cycle must NOT trigger. Two very different costs, one gate:
+#   * tier1_opensanctions_lookup -- ~40-45s per query over 1.3M rows.
+#   * opensanctions_match_api    -- a live API on a 50-requests-PER-MONTH trial,
+#     where "expensive" means a hard monthly budget, not seconds. Bulk-screening
+#     2,000 clients would exhaust a month's quota in a single sweep, so it fires
+#     only when a caller opts in with allow_expensive_providers=True -- the
+#     deliberate, one-case demo run.
 # Never queried unless a caller explicitly asks for it by name.
-EXPENSIVE_PROVIDERS = frozenset({"tier1_opensanctions_lookup"})
+EXPENSIVE_PROVIDERS = frozenset({"tier1_opensanctions_lookup", "opensanctions_match_api"})
 
 
 @dataclass

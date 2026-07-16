@@ -14,7 +14,7 @@
  */
 
 import { Link, useParams } from "react-router-dom"
-import { AlertTriangle, ArrowLeft, Bot, FileText, Scale } from "lucide-react"
+import { AlertTriangle, ArrowLeft, Bot, FileText, Gavel, Scale } from "lucide-react"
 import {
   Badge,
   Button,
@@ -27,13 +27,19 @@ import {
   LoadingBlock,
 } from "@/components/ui"
 import { GroundingIndicator } from "@/components/domain"
-import { useInvestigation } from "@/hooks/queries"
+import { useCases, useInvestigation } from "@/hooks/queries"
 import { fmtDateTime, fmtOrDash, humanize } from "@/lib/utils"
 import { Page } from "./Dashboard"
 
 export default function InvestigationPage() {
   const { investigationId } = useParams()
   const query = useInvestigation(Number(investigationId))
+  // EVERY hook must run on every render, before any early return. Placing this
+  // after the loading/error guards below made it run only on the loaded render,
+  // which crashes with "rendered more hooks than during the previous render"
+  // the instant the page first paints in its loading state. Rules of Hooks are
+  // not a style preference; this is load-bearing.
+  const cases = useCases({ limit: 100 })
 
   if (query.isLoading) return <LoadingBlock label="Loading investigation" rows={8} />
   if (query.error)
@@ -46,16 +52,31 @@ export default function InvestigationPage() {
   const { investigation, report, recommendations, evaluation } = query.data!
   const failed = investigation.status === "FAILED"
 
+  // This report is read-only: the agent explains, it never decides. Every
+  // compliance action lives on the case. So resolve the case for this client
+  // and point there -- otherwise a reviewer reads the report and has nowhere to
+  // act, which is exactly the dead end this link removes.
+  const linkedCase = cases.data?.cases.find((c) => c.client_id === investigation.client_id)
+
   return (
     <Page
       title={`Investigation #${investigation.id}`}
       subtitle={investigation.trigger_reason ?? undefined}
       actions={
-        <Button variant="outline" size="sm" asChild>
-          <Link to={`/customers/${investigation.client_id}`}>
-            <ArrowLeft className="h-3.5 w-3.5" /> Customer
-          </Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link to={`/customers/${investigation.client_id}`}>
+              <ArrowLeft className="h-3.5 w-3.5" /> Customer
+            </Link>
+          </Button>
+          {linkedCase ? (
+            <Button size="sm" asChild>
+              <Link to={`/cases/${linkedCase.id}`}>
+                <Gavel className="h-3.5 w-3.5" /> Act on {linkedCase.case_ref}
+              </Link>
+            </Button>
+          ) : null}
+        </div>
       }
     >
       {/* The boundary, stated at the top of the page. */}

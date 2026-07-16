@@ -28,6 +28,7 @@ import type {
   HealthResponse,
   InvestigationDetail,
   InvestigationListResponse,
+  MonitorCycleResult,
   ProviderListResponse,
   ReviewAction,
   RiskEventListResponse,
@@ -196,10 +197,29 @@ export const api = {
   sar: (id: number) => request<SARDraft>(`/cases/${id}/sar`),
 
   // --- monitoring ---
-  monitorClient: (externalClientId: number) =>
-    request<unknown>(`/monitor/client/${externalClientId}`, {
+  /**
+   * Run one monitoring cycle.
+   *
+   * Providers and resolution are ON. The first version of this call disabled
+   * both, which scored the client but never ran the sanctions or adverse-media
+   * checks -- so the workspace then showed "No evidence on file", and a
+   * reviewer would read that as "we looked and found nothing" when the truth
+   * was "we never looked". The backend spends real effort distinguishing those
+   * two (NOT_CONFIGURED vs NO_RESULTS); a client that skips the check and
+   * renders the same empty box throws that distinction away.
+   *
+   * `allow_expensive_providers` stays FALSE: the OpenSanctions provider streams
+   * 1.3M rows at ~40-45s per query and is opt-in by design, which is not a cost
+   * a button press should silently impose. The remaining providers cost ~0.5s.
+   */
+  monitorClient: (externalClientId: number, opts: { allowExpensive?: boolean } = {}) =>
+    request<MonitorCycleResult>(`/monitor/client/${externalClientId}`, {
       method: "POST",
-      body: JSON.stringify({ include_providers: false, include_resolution: false }),
+      body: JSON.stringify({
+        include_providers: true,
+        include_resolution: true,
+        allow_expensive_providers: opts.allowExpensive ?? false,
+      }),
     }),
 }
 
