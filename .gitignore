@@ -1,0 +1,49 @@
+# Never commit real secrets.
+.env
+*.db
+*.db-wal
+*.db-shm
+node_modules/
+dist/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.pyc
+
+# ---------------------------------------------------------------------------
+# data/
+#
+# This directory is the read-only source of truth (Phase 0) and is NOT excluded
+# wholesale: the small curated CSVs are what make `POST /ingestion/load` work on
+# a fresh clone, and a repository whose demo cannot run is not a demo. What is
+# excluded below is excluded for a stated reason, not for convenience.
+#
+# NOTE: an ignore rule only affects UNTRACKED files. These paths were staged
+# before this section existed, so they also had to be removed from the index
+# with `git rm --cached` (which leaves them untouched on disk -- data/ is never
+# modified).
+# ---------------------------------------------------------------------------
+
+# The two Tier-1 datasets that are LOOKUP_ONLY by design (ADR/registry): they
+# are streamed live by providers and deliberately have no loader, which is why
+# SQLite stays ~18 MB against 1.6 GB of source data. They are also both over
+# GitHub's hard 100 MB limit, so this is not a preference -- the push is
+# rejected outright with them present.
+#   SAML-D.csv                 950 MB / 9.5M rows
+#   opensanctions_targets.csv  466 MB / 1.3M rows
+# Without them the app degrades honestly (the providers report their status
+# rather than inventing results), which is the behaviour those providers exist
+# to demonstrate. See docs/datasets.md to obtain them.
+data/aml_transactions/SAML-D.csv
+data/sanctions/opensanctions_targets.csv
+
+# ~190 MB of a leftover privacy/GDPR project that shares this folder by
+# accident. It is never registered as a KYC source and no code path reads it,
+# so shipping it would just be freight. Ignored here, kept on disk.
+data/opp115/
+data/privacy_qa/
+data/gdpr_text/
+data/gdpr.json
+data/gdpr_articles.csv
+data/gcapi.dll

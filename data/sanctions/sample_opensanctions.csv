@@ -1,0 +1,23 @@
+id,schema,name,aliases,birth_date,countries,addresses,identifiers,sanctions,phones,emails,dataset,first_seen,last_seen,last_change
+os-001923,Person,Mohammad Al-Rashid,M. Rashid;Mohammed AL RASHID,1975-03-15,ae,,Passport A1234567 (UAE),OFAC SDN - SDGT,,,us_ofac_sdn,2019-06-12,2026-07-01,2026-06-15
+os-002105,Person,Viktor Ivanovich Petrov,V.I. PETROV;Viktor PETROV,1968-08-22,ru,,Passport RF55012345,OFAC SDN - UKRAINE-EO13662,,,us_ofac_sdn;ua_nsdc_sanctions,2022-03-01,2026-07-01,2026-05-20
+os-002301,Company,Tehran Industrial Metals Co,TIM CO;TEHRAN METALS,,ir,"Tehran, Iran",Commercial Registry 45892,OFAC SDN - IRAN,,,us_ofac_sdn;eu_sanctions_map,2018-11-05,2026-07-01,2026-04-10
+os-002455,Person,Kim Jong-Su,,1982-01-01,kp,,Passport NK9921003,OFAC SDN - NORTH-KOREA,,,us_ofac_sdn;un_sc_sanctions,2020-09-15,2026-07-01,2026-03-22
+os-002510,Company,Damascus Trading House LLC,,,sy,"Damascus, Syria",Commercial Registry SY-20145,OFAC SDN - SYRIA,,,us_ofac_sdn,2017-08-20,2026-07-01,2026-02-18
+os-002687,Person,Elena Sergeevna Ivanova,E.S. IVANOVA;Elena IVANOVA,1979-06-10,ru,,Passport RF82001234,OFAC SDN - UKRAINE-EO13662,,,us_ofac_sdn;eu_sanctions_map,2022-04-15,2026-07-01,2026-06-01
+os-002790,Company,Golden Crescent Shipping Ltd,,,ae;pa,"Dubai, UAE",,OFAC SDN - SDGT,,,us_ofac_sdn,2021-01-10,2026-07-01,2026-05-15
+os-002891,Person,Ali Reza Hosseini,A.R. HOSSEINI;Ali HOSSEINI;Ali Reza HOSSEYNI,1971-12-05,ir,,,OFAC SDN - IRAN,,,us_ofac_sdn;eu_sanctions_map,2019-02-28,2026-07-01,2026-06-20
+os-003012,Company,Euroasia Energy Holdings AG,,,ch;ru,"Zug, Switzerland",Commercial Registry CH-170.3.028.123-4,OFAC SDN - UKRAINE-EO13662,,,us_ofac_sdn,2023-01-20,2026-07-01,2026-04-30
+os-003156,Person,Tran Duc Nguyen,,1985-09-18,vn,,Passport B4567890 (Vietnam),OFAC SDN - SDGT,,,us_ofac_sdn,2024-03-01,2026-07-01,2026-06-10
+os-003289,Company,Oriental Pearl Finance Group,,,hk,"Hong Kong",Company Registry HK-2891034,OFAC SDN - SDGT,,,us_ofac_sdn,2023-07-05,2026-07-01,2026-05-25
+os-003401,Person,Dmitri Alexandrovich Sokolov,D.A. SOKOLOV;Dmitri SOKOLOV,1963-11-30,ru,,,,us_ofac_sdn;ua_nsdc_sanctions,2022-03-01,2026-07-01,2026-06-08
+os-003550,Person,Rahul Sharma,,1980-04-12,in,,Passport J5543210 (India),OFAC SDN - SDGT,,,us_ofac_sdn,2024-01-15,2026-07-01,2026-06-25
+os-003612,Company,Caspian Sea Oil Services FZCO,,,ae;ir,"Dubai, UAE",License JAFZA-20198,OFAC SDN - IRAN,,,us_ofac_sdn,2020-06-18,2026-07-01,2026-05-12
+os-003780,Person,Farid Hassan Abadi,F.H. ABADI;Farid ABADI,1977-07-25,sy,,Passport SY0012345,OFAC SDN - SYRIA,,,us_ofac_sdn,2018-09-10,2026-07-01,2026-04-22
+os-003901,Company,Northern Logistics GmbH,,,de;ru,"Hamburg, Germany",HRB 145782,OFAC SDN - UKRAINE-EO13662,,,us_ofac_sdn;eu_sanctions_map,2023-05-10,2026-07-01,2026-06-15
+os-004023,Person,Chen Wei Lin,,1988-03-03,cn,,Passport G12340056 (China),OFAC SDN - NORTH-KOREA,,,us_ofac_sdn,2024-02-20,2026-07-01,2026-06-30
+os-100001,Person,Ahmed bin Khalid Al Thani,,1965-05-20,qa,,,PEP - Head of State relative,,,pep_database,2015-01-01,2026-07-01,2026-06-01
+os-100002,Person,Maria Gonzalez Fernandez,,1978-11-14,ve,,Cedula V-12345678,OFAC SDN - VENEZUELA,,,us_ofac_sdn;opensanctions,2019-08-01,2026-07-01,2026-05-20
+os-100003,Company,Red Star Minerals OOO,,,ru,"Moscow, Russia",OGRN 1027700132195,,,,ru_rupep,2022-06-01,2026-07-01,2026-06-18
+os-100004,Person,Hassan Nasrallah,Abu Hadi,1960-08-31,lb,,,OFAC SDN - SDGT,,,us_ofac_sdn;un_sc_sanctions;eu_sanctions_map,2001-10-12,2026-07-01,2026-06-28
+os-100005,Company,Sunrise Development Holdings BVI,,,vg;ru,"Road Town, BVI",Company Number 1892345,,,,gb_coh_disqualified,2023-09-15,2026-07-01,2026-06-05

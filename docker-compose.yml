@@ -1,0 +1,60 @@
+# Continuous KYC Autonomous Auditor -- full stack.
+#
+#   docker compose up --build     ->  http://localhost:8080
+#
+# The frontend proxies /api to the backend, so the whole app is same-origin:
+# no CORS, no hardcoded host, one port to expose.
+
+services:
+  backend:
+    build:
+      context: ./backend
+    environment:
+      # Safe defaults. Nothing here is a secret; real keys come from .env.
+      ENVIRONMENT: production
+      DEBUG: "false"
+      LOG_LEVEL: INFO
+      DATABASE_URL: sqlite:////app/data/continuous_kyc.db
+      # The datasets are mounted read-only (see volumes); never modified.
+      RAW_DATA_DIR: /data
+
+      # LLM provider. Unset by default: with no key the agent reports
+      # NOT_CONFIGURED and every investigation is recorded as FAILED with the
+      # reason -- never a fabricated report. Supply via a .env file next to
+      # this compose file; it is git-ignored.
+      LLM_PROVIDER: ${LLM_PROVIDER:-groq}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-120b}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-claude-opus-4-8}
+      LLM_MAX_OUTPUT_TOKENS: ${LLM_MAX_OUTPUT_TOKENS:-4000}
+      LLM_TEMPERATURE: ${LLM_TEMPERATURE:-0.0}
+    volumes:
+      # Datasets are the source of truth and are NEVER written to (project
+      # rule). Mounted read-only so the container physically cannot.
+      - ./data:/data:ro
+      # The database persists across restarts.
+      - kyc-db:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health/ready', timeout=4).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        # Wait for READY, not merely started: the UI's first paint calls the
+        # API, and a frontend that loads before the DB is up shows errors on
+        # a system that is actually fine.
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  kyc-db:

@@ -1,0 +1,42 @@
+{
+  "description": "Simple clean corporate structure with no sanctions hits. Used as a comparison/control case alongside the showcase structure.",
+  "entities": [
+    {
+      "entity_id": "CLEAN-CORP-001",
+      "name": "Greenfield Technologies Pte Ltd",
+      "entity_type": "company",
+      "context": "Singapore-based technology consulting firm",
+      "nationality": "SG",
+      "sector": "Tech"
+    },
+    {
+      "entity_id": "CLEAN-SUB-002",
+      "name": "Greenfield Solutions EU GmbH",
+      "entity_type": "company",
+      "context": "European subsidiary providing IT consulting services",
+      "nationality": "DE",
+      "sector": "Tech"
+    },
+    {
+      "entity_id": "CLEAN-IND-003",
+      "name": "Sarah Chen Wei",
+      "entity_type": "individual",
+      "context": "Founder and CEO with 20 years experience in fintech",
+      "nationality": "SG"
+    }
+  ],
+  "ownership_edges": [
+    {
+      "owner_id": "CLEAN-CORP-001",
+      "owned_id": "CLEAN-SUB-002",
+      "percentage": 100.0,
+      "description": "Greenfield Technologies wholly owns its EU subsidiary"
+    },
+    {
+      "owner_id": "CLEAN-IND-003",
+      "owned_id": "CLEAN-CORP-001",
+      "percentage": 65.0,
+      "description": "Sarah Chen Wei is the majority shareholder"
+    }
+  ]
+}

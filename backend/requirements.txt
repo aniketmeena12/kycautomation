@@ -1,0 +1,34 @@
+# Continuous KYC Autonomous Auditor -- backend dependencies
+#
+# Deliberately minimal. Every dependency here is used by code in the phase
+# that introduced it. No agent frameworks, no Postgres/Kafka/Redis/Celery/
+# vector-db drivers -- see docs/phase-0-dataset-audit.md SS11 and
+# docs/phase-1-foundation.md for the reasoning.
+
+fastapi>=0.111,<0.120
+uvicorn[standard]>=0.29,<0.35
+sqlalchemy>=2.0,<2.1
+pydantic>=2.7,<3.0
+pydantic-settings>=2.2,<3.0
+pandas>=2.2,<3.0
+rapidfuzz>=3.9,<4.0
+
+# --- Phase 5: the Investigation Agent's LLM providers ---
+# The first model SDKs in this project, added only once a phase actually calls
+# a model. Both are OPTIONAL runtime dependencies: each provider imports its SDK
+# lazily, so the application, the test suite, and every deterministic component
+# (ingestion, entity resolution, the risk engine) all run with BOTH uninstalled
+# -- an unavailable provider simply reports NOT_CONFIGURED. See ADR-023.
+#
+# You only need the SDK for the provider you actually use (LLM_PROVIDER).
+# Neither is imported unless that provider is selected AND invoked.
+#
+# The agent is written against the LLMProvider Protocol in
+# app/providers/llm_contracts.py, not against either package -- which is why
+# adding Groq required no change outside the provider layer. See ADR-024/030.
+anthropic>=0.69,<1.0
+groq>=0.11,<1.0
+
+# Testing
+pytest>=8.0,<9.1
+httpx>=0.27,<0.29

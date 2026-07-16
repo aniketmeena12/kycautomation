@@ -1,0 +1,56 @@
+{
+  "_comment": [
+    "Entity-resolution confidence weights. Loaded at runtime by app/resolution/config.py --",
+    "NOT hardcoded in Python (Phase 3 brief SS7). Override the file path with",
+    "RESOLUTION_WEIGHTS_PATH, or edit these values and restart.",
+    "",
+    "These are EXPERT-SET STARTING VALUES, not statistically calibrated ones.",
+    "docs/phase-0-dataset-audit.md SS14 established that this dataset cannot support real",
+    "calibration (client names resolve to nothing in the authoritative lists; only 60 clients",
+    "carry behavioural ground truth). Presenting them as fitted would be a lie. They encode a",
+    "deliberate compliance posture: name similarity alone can never reach high confidence --",
+    "corroborating attributes must carry it there, and conflicts must be able to sink it.",
+    "",
+    "positive_weights: max points a scorer contributes at score=1.0.",
+    "conflict_penalties: points SUBTRACTED when a scorer detects a genuine contradiction.",
+    "Penalties intentionally exceed most single positive weights: a confirmed DOB or",
+    "entity-type contradiction should defeat a strong name match, which is exactly the",
+    "false-positive class Phase 0 found in this data (AL-RASHID TRUST vs Mohammad Al-Rashid)."
+  ],
+
+  "positive_weights": {
+    "name": 40.0,
+    "alias": 15.0,
+    "country": 10.0,
+    "nationality": 10.0,
+    "entity_type": 8.0,
+    "dob": 20.0,
+    "identifier": 25.0,
+    "ownership": 6.0,
+    "organization": 6.0
+  },
+
+  "conflict_penalties": {
+    "country": 15.0,
+    "nationality": 20.0,
+    "entity_type": 35.0,
+    "dob": 40.0,
+    "identifier": 30.0,
+    "ownership": 5.0,
+    "organization": 5.0
+  },
+
+  "thresholds": {
+    "name_floor": 0.70,
+    "high_confidence": 85.0,
+    "possible": 60.0,
+    "rejected_below": 40.0
+  },
+
+  "scorer_thresholds": {
+    "name_match": 0.85,
+    "alias_match": 0.85,
+    "organization_match": 0.85,
+    "partial_dob_year_credit": 0.5
+  }
+}

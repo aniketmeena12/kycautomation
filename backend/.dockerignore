@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+# NEVER ship a real .env or a local database into an image.
+.env
+data/*.db
+data/*.db-wal
+data/*.db-shm

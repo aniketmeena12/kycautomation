@@ -1,0 +1,58 @@
+{
+  "description": "Showcase UBO structure: sanctioned individual hidden 3 layers deep through offshore shell companies. This is the headline demo scenario from the playbook.",
+  "entities": [
+    {
+      "entity_id": "UBO-CORP-001",
+      "name": "Clean Corp Ltd",
+      "entity_type": "company",
+      "context": "Legitimate-appearing Dubai-based import-export company",
+      "nationality": "AE",
+      "sector": "Import/Export"
+    },
+    {
+      "entity_id": "UBO-HOLD-002",
+      "name": "Meridian Holdings International",
+      "entity_type": "company",
+      "context": "Offshore holding company registered in Cayman Islands",
+      "nationality": "KY",
+      "sector": "Financial Services"
+    },
+    {
+      "entity_id": "UBO-SHELL-003",
+      "name": "Aegean Ventures Cyprus Ltd",
+      "entity_type": "company",
+      "context": "Shell company registered in Cyprus with minimal operations",
+      "nationality": "CY",
+      "sector": "Consulting"
+    },
+    {
+      "entity_id": "UBO-IND-004",
+      "name": "Mohammad Al-Rashid",
+      "entity_type": "individual",
+      "context": "Director with corporate ownership links in UAE region",
+      "nationality": "UAE",
+      "dob": "1975",
+      "company": "ABC Holdings"
+    }
+  ],
+  "ownership_edges": [
+    {
+      "owner_id": "UBO-CORP-001",
+      "owned_id": "UBO-HOLD-002",
+      "percentage": 80.0,
+      "description": "Clean Corp owns 80% of Meridian Holdings"
+    },
+    {
+      "owner_id": "UBO-HOLD-002",
+      "owned_id": "UBO-SHELL-003",
+      "percentage": 60.0,
+      "description": "Meridian Holdings owns 60% of Aegean Ventures"
+    },
+    {
+      "owner_id": "UBO-SHELL-003",
+      "owned_id": "UBO-IND-004",
+      "percentage": 100.0,
+      "description": "Aegean Ventures wholly controlled by Mohammad Al-Rashid (sanctioned)"
+    }
+  ]
+}
