@@ -77,6 +77,30 @@ def _decode(raw: str | None) -> Any:
         return None
 
 
+def _reasons_summary(raw: str | None) -> str | None:
+    """Turn a stored entity-match `reasons` value into a short human summary.
+
+    The value has TWO shapes in the wild: the current resolution pipeline stores
+    a structured object ``{summary, positive, negative, not_applicable}``, while
+    older/simpler matches stored a bare list of strings. The timeline used to
+    assume the list shape and did ``reasons[:3]`` -- which, on the object shape,
+    slices a dict and raises ``TypeError: unhashable type: 'slice'``, 500-ing the
+    timeline (and SAR generation, which builds the timeline) for ANY case that
+    had an entity match. Handle both shapes explicitly.
+    """
+    decoded = _decode(raw)
+    if isinstance(decoded, dict):
+        summary = decoded.get("summary")
+        if summary:
+            return str(summary)
+        parts = [str(x) for x in (decoded.get("positive") or [])]
+        parts += [str(x) for x in (decoded.get("negative") or [])]
+        return "; ".join(parts[:3]) or None
+    if isinstance(decoded, list):
+        return "; ".join(str(x) for x in decoded[:3]) or None
+    return None
+
+
 class TimelineBuilder:
     def __init__(self, db: Session) -> None:
         self._db = db
@@ -258,7 +282,7 @@ class TimelineBuilder:
                         f"Entity resolution: {match.status.value} "
                         f"({match.combined_confidence:.0f}/100) vs {match.candidate_name}"
                     ),
-                    summary=_decode(match.reasons) and "; ".join(_decode(match.reasons)[:3]) or None,
+                    summary=_reasons_summary(match.reasons),
                     # CONFIRMED/HUMAN_REVIEWED are reachable only by a human
                     # (ADR-016), so the actor follows the status rather than
                     # being assumed -- the timeline must not credit a machine

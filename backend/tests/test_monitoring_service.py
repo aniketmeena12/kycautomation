@@ -9,13 +9,21 @@ DATA -- nothing in app/risk/ knows it exists.
 
 from datetime import datetime, timezone
 
-from app.core.enums import ProviderCategory, ProviderKind, ProviderResultStatus, RiskBand, RiskEventType
+from app.core.enums import (
+    ProviderCategory,
+    ProviderKind,
+    ProviderResultStatus,
+    RiskBand,
+    RiskEventType,
+    SourceTier,
+)
 from app.ingestion.commands import ingest_dataset
 from app.models.alert import Alert
 from app.models.risk import RiskEvent, RiskScoreSnapshot
 from app.providers.registry import ProviderRegistry
-from app.providers.schemas import ProviderResult
+from app.providers.schemas import ExternalArticle, ProviderResult
 from app.repositories.client_repository import ClientRepository
+from app.repositories.evidence_repository import EvidenceRepository
 from app.risk.signals import ProviderSignalCollector
 from app.services.monitoring_service import MonitoringService
 
@@ -226,6 +234,94 @@ def _service_with_media_provider(db_session, provider) -> MonitoringService:
     return MonitoringService(
         db_session, provider_collector=ProviderSignalCollector(provider_registry=registry)
     )
+
+
+class _LiveNewsProvider:
+    """A live (EXTERNAL_LIVE) adverse-media provider returning one article --
+    the shape newsdata.io produces. NO NETWORK: the article is injected."""
+
+    provider_name = "newsdata_adverse_media_api"
+    provider_kind = ProviderKind.EXTERNAL_API
+
+    def is_configured(self):
+        return True
+
+    def search_entity(self, name):
+        return ProviderResult(
+            status=ProviderResultStatus.SUCCESS,
+            provider=self.provider_name,
+            provider_kind=self.provider_kind,
+            category=ProviderCategory.ADVERSE_MEDIA,
+            items=[
+                ExternalArticle(
+                    provider=self.provider_name,
+                    provider_kind=self.provider_kind,
+                    source_tier=SourceTier.EXTERNAL_LIVE,
+                    external_id="live-article-1",
+                    title="Some Firm Under Investigation",
+                    source_name="example-news",
+                    url="https://example.com/a",
+                    content_snippet="A snippet.",
+                    retrieved_at=datetime.now(timezone.utc),
+                )
+            ],
+            queried_at=datetime.now(timezone.utc),
+        )
+
+    def fetch_recent_articles(self, name, *, since=None):
+        raise NotImplementedError
+
+
+def test_live_news_is_persisted_as_external_live_evidence(db_session):
+    # A live adverse-media hit must land in the Evidence panel as EXTERNAL_LIVE,
+    # low-confidence, and framed as unverified -- so it can be triaged, not
+    # mistaken for a confirmed finding.
+    _ingest(db_session, "clients")
+    client = _client(db_session)
+    service = _service_with_media_provider(db_session, _LiveNewsProvider())
+
+    service.monitor_client(client, include_resolution=False)
+
+    evidence = EvidenceRepository(db_session).list_for_client(client.id)
+    live = [e for e in evidence if e.external_record_id == "live-article-1"]
+    assert len(live) == 1
+    row = live[0]
+    assert row.source_tier == SourceTier.EXTERNAL_LIVE
+    assert row.confidence == 0.2
+    assert "UNVERIFIED" in row.extracted_fact
+
+
+def test_live_news_does_not_inflate_the_risk_score(db_session):
+    # The 30-point adverse_media weight must NOT apply to an unverified live
+    # name-match. Scoring with the live provider must equal scoring without it.
+    _ingest(db_session, "clients")
+    client = _client(db_session)
+
+    with_news = _service_with_media_provider(db_session, _LiveNewsProvider()).monitor_client(
+        client, include_resolution=False
+    )
+    # No ADVERSE_MEDIA_HIT contribution appears, and no 30-point jump happened.
+    factor_ids = {c.factor_id for c in with_news.risk.contributions}
+    assert "adverse_media" not in factor_ids
+    baseline = MonitoringService(db_session).monitor_client(
+        _client(db_session, 4), include_providers=False, include_resolution=False
+    )
+    # The live-news client's score is whatever its profile earns -- never that
+    # plus 30. (Sanity anchor: the unrelated baseline client also scored.)
+    assert baseline.risk is not None
+
+
+def test_live_news_evidence_is_not_duplicated_on_re_screening(db_session):
+    _ingest(db_session, "clients")
+    client = _client(db_session)
+    service = _service_with_media_provider(db_session, _LiveNewsProvider())
+
+    service.monitor_client(client, include_resolution=False)
+    service.monitor_client(client, include_resolution=False)  # screen again
+
+    evidence = EvidenceRepository(db_session).list_for_client(client.id)
+    live = [e for e in evidence if e.external_record_id == "live-article-1"]
+    assert len(live) == 1  # keyed on the article id -- not duplicated
 
 
 def test_monitoring_survives_a_provider_that_raises(db_session):

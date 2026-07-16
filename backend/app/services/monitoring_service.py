@@ -46,7 +46,9 @@ from app.core.enums import (
     ActorType,
     AlertStatus,
     EntityMatchSubjectType,
+    ProviderKind,
     RiskEventStatus,
+    SourceTier,
 )
 from app.models.client import Client
 from app.repositories.client_repository import ClientRepository
@@ -62,11 +64,14 @@ from app.risk.schemas import (
     RiskSignal,
 )
 from app.risk.signals import (
+    SIGNAL_ADVERSE_MEDIA,
+    SIGNAL_ADVERSE_MEDIA_UNVERIFIED,
     InternalSignalCollector,
     ProviderSignalCollector,
     ResolutionSignalCollector,
 )
 from app.services.audit_service import record_audit_event
+from app.services.evidence_service import EvidenceService
 from app.services.entity_resolution_service import EntityResolutionService
 
 MAX_CONTRIBUTIONS_JSON_CHARS = 8000
@@ -100,6 +105,10 @@ class MonitoringService:
         self._snapshots = RiskSnapshotRepository(db)
         self._alerts = AlertRepository(db)
         self._evidence = EvidenceRepository(db)
+        # Read side (above) is the repository; write side is the service, which
+        # is the ONLY writer of Evidence rows. Monitoring uses it to turn an
+        # adverse-media article into evidence on the client.
+        self._evidence_writer = EvidenceService(db)
 
     # ------------------------------------------------------------------ #
     # Public entry points (brief SS8)
@@ -219,6 +228,12 @@ class MonitoringService:
             signals.extend(media_signals)
             providers_queried.extend(queried)
             provider_failures.extend(failures)
+            # 4b. Persist adverse-media hits as evidence on the client. An
+            # article the screening returned is evidence on file whether or not
+            # it also raises a risk event, so this is independent of step 5 --
+            # and it sets each signal's evidence_ids so a resulting event links
+            # the same row.
+            self._persist_adverse_media_evidence(client, signals)
 
         # 5. Change detection -> new events only.
         new_events, suppressed = self._create_new_events(client, signals)
@@ -271,6 +286,74 @@ class MonitoringService:
             started_at=started,
             completed_at=_now(),
         )
+
+    def _persist_adverse_media_evidence(self, client: Client, signals: list[RiskSignal]) -> None:
+        """Turn adverse-media provider hits into Evidence rows on the client.
+
+        A LIVE (EXTERNAL_LIVE) hit is an UNVERIFIED name-match: the article may
+        concern a different entity that merely shares the name. It is recorded
+        with low confidence and framed, in the evidence text itself, as needing
+        a human to confirm relevance -- and because it carries the
+        ADVERSE_MEDIA_UNVERIFIED signal_type that no scoring factor claims, it
+        adds 0 to the risk score until that confirmation happens. A curated
+        (verified) hit keeps its normal confidence and its scoring weight.
+
+        Idempotent: evidence is keyed on the article id per client, so
+        re-screening links the existing row rather than duplicating it.
+        """
+        by_ext = {
+            e.external_record_id: e.id
+            for e in self._evidence.list_for_client(client.id)
+            if e.external_record_id
+        }
+        for signal in signals:
+            if signal.signal_type not in (SIGNAL_ADVERSE_MEDIA, SIGNAL_ADVERSE_MEDIA_UNVERIFIED):
+                continue
+            meta = signal.metadata or {}
+            article_id = meta.get("article_id")
+            if not article_id:
+                continue
+            if article_id in by_ext:
+                signal.evidence_ids = [by_ext[article_id]]
+                continue
+
+            unverified = bool(meta.get("unverified"))
+            tier = SourceTier(meta["source_tier"]) if meta.get("source_tier") else (
+                SourceTier.EXTERNAL_LIVE if unverified else SourceTier.TIER_2_CURATED_DEMO
+            )
+            provider_kind = (
+                ProviderKind(meta["provider_kind"]) if meta.get("provider_kind") else ProviderKind.EXTERNAL_API
+            )
+            title = meta.get("title") or str(article_id)
+            summary = (
+                f"UNVERIFIED live adverse media: \"{title}\". A name-match only -- a human must confirm this "
+                f"article concerns the subject before it affects risk. Contributes 0 to the score until then."
+                if unverified
+                else f"Adverse-media article: \"{title}\"."
+            )
+            evidence = self._evidence_writer.record_adverse_media_evidence(
+                article_external_id=str(article_id),
+                summary=summary,
+                # Low, provisional confidence for an unverified name-match; the
+                # curated hit keeps the signal's own confidence.
+                confidence=0.2 if unverified else signal.confidence,
+                provider_name=signal.source,
+                provider_kind=provider_kind,
+                source_tier=tier,
+                client_id=client.id,
+                snippet=meta.get("snippet"),
+                structured_facts={
+                    "url": meta.get("url"),
+                    "source_name": meta.get("source_name"),
+                    "unverified": unverified,
+                },
+                source_reference=meta.get("url"),
+                retrieved_at=signal.occurred_at,
+            )
+            by_ext[article_id] = evidence.id
+            signal.evidence_ids = [evidence.id]
+
+        self._db.flush()
 
     def _collect_provider_signals(self, client: Client):
         """Provider categories run concurrently.

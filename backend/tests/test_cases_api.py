@@ -183,6 +183,19 @@ def test_sar_generation_and_retrieval(client, db_session):
     assert client.get(f"/api/v1/cases/{case_id}").json()["case"]["status"] == "SAR_REVIEW"
 
 
+def test_sar_generation_on_an_open_case_is_409_not_500(client, db_session):
+    # Drafting a SAR moves the case to SAR_REVIEW, which is illegal from OPEN --
+    # a case must be under review first. That is a workflow state error and must
+    # surface as an actionable 409, never a 500 (which is what a real case hit in
+    # the browser: "Internal server error" with no guidance).
+    _prepare(db_session)
+    case_id = _open(client)  # case is OPEN, no review recorded
+    response = client.post(f"/api/v1/cases/{case_id}/sar", json={"requested_by": REVIEWER})
+    assert response.status_code == 409
+    detail = response.json()["detail"]
+    assert "under review" in detail.lower()
+
+
 def test_sar_before_generation_is_404_with_a_useful_hint(client, db_session):
     _prepare(db_session)
     case_id = _open(client)

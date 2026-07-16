@@ -48,6 +48,7 @@ from app.schemas.case import (
     review_read,
     sar_read,
 )
+from app.casework.state_machine import IllegalActionError, IllegalTransitionError
 from app.services.case_service import (
     CaseNotFoundError,
     CaseService,
@@ -164,6 +165,18 @@ def generate_sar(case_id: int, request: GenerateSARRequest, db: Session = Depend
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ReviewRejectedError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except (IllegalTransitionError, IllegalActionError) as exc:
+        # Drafting a SAR moves the case into SAR_REVIEW, which is only legal once
+        # the case is under review. Reaching here from OPEN is a workflow state
+        # error, not a server fault -- return an actionable 409, never a 500.
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "A SAR draft can only be generated once the case is under review. "
+                "Record a review decision first (e.g. Acknowledge or Escalate), then generate the draft. "
+                f"({exc})"
+            ),
+        ) from exc
     return sar_read(sar)
 
 

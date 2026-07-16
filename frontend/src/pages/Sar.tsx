@@ -207,7 +207,7 @@ export default function SarPage() {
                         </span>
                       ) : null}
                     </div>
-                    <pre className="mt-2 whitespace-pre-wrap font-sans text-[12px] leading-relaxed">{s.body}</pre>
+                    <SarBody body={s.body} />
                   </section>
                 ))}
 
@@ -294,5 +294,51 @@ export default function SarPage() {
         </>
       ) : null}
     </Page>
+  )
+}
+
+/**
+ * Render one SAR section body so it reads like a document rather than a raw
+ * dump. The backend authors two kinds of content:
+ *
+ *  - TABULAR sections (Subject Information, Chronology, Risk Indicators) are
+ *    hand-aligned with spaces for a fixed-width font. Rendered in a proportional
+ *    font they turn to ragged mush -- "Client ID:      44" no longer lines up.
+ *    These are shown in monospace so the alignment the author intended actually
+ *    holds, and scroll horizontally instead of wrapping (wrapping an aligned row
+ *    breaks the columns).
+ *  - PROSE sections (the AI narrative, findings, recommendations, disclaimer)
+ *    are sentences. These are shown as wrapped paragraphs in a normal reading
+ *    font, split on blank lines so paragraphs breathe.
+ *
+ * A body is treated as tabular when at least two of its lines contain a run of
+ * two or more spaces between non-space characters -- the signature of column
+ * padding. This is content-driven, so a section that changes shape later still
+ * renders correctly without a hardcoded per-section rule.
+ */
+function SarBody({ body }: { body: string }) {
+  const lines = body.split("\n")
+  const tabularLines = lines.filter((l) => /\S {2,}\S/.test(l)).length
+  const isTabular = tabularLines >= 2
+
+  if (isTabular) {
+    return (
+      <div className="mt-2 overflow-x-auto">
+        <pre className="font-mono text-[11px] leading-relaxed text-foreground">{body}</pre>
+      </div>
+    )
+  }
+
+  // Prose: blank-line-separated blocks become paragraphs; line breaks within a
+  // block are preserved (a list of recommendations keeps its lines) but wrap.
+  const blocks = body.split(/\n\s*\n/).map((b) => b.trim()).filter(Boolean)
+  return (
+    <div className="mt-2 space-y-2 text-[12px] leading-relaxed">
+      {blocks.map((block, i) => (
+        <p key={i} className="whitespace-pre-wrap">
+          {block}
+        </p>
+      ))}
+    </div>
   )
 }

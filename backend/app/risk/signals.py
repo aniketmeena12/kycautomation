@@ -33,7 +33,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
-from app.core.enums import EntityMatchStatus, ProviderCategory, ProviderResultStatus, SectorRisk
+from app.core.enums import EntityMatchStatus, ProviderCategory, ProviderResultStatus, SectorRisk, SourceTier
 from app.models.client import Client
 from app.providers.registry import ProviderRegistry, get_provider_registry
 from app.repositories.transaction_repository import TransactionRepository
@@ -49,6 +49,13 @@ SIGNAL_TRANSACTION_TYPOLOGY = "TRANSACTION_TYPOLOGY"
 SIGNAL_SANCTIONS_RESOLUTION = "SANCTIONS_RESOLUTION"
 SIGNAL_ENTITY_CONFLICT = "ENTITY_CONFLICT"
 SIGNAL_ADVERSE_MEDIA = "ADVERSE_MEDIA"
+# A live third-party news name-match is NOT the same signal as a curated,
+# verified adverse-media hit. It is an unverified lead: the article may concern
+# a different entity that merely shares the name. It is recorded as evidence for
+# a human to triage, but it must not carry the 30-point ADVERSE_MEDIA weight on a
+# bare name-match -- so it gets its own signal_type that no scoring factor
+# claims, contributing 0 until a human confirms relevance.
+SIGNAL_ADVERSE_MEDIA_UNVERIFIED = "ADVERSE_MEDIA_UNVERIFIED"
 SIGNAL_OWNERSHIP_EXPOSURE = "OWNERSHIP_EXPOSURE"
 SIGNAL_PROVIDER_FAILURE = "PROVIDER_FAILURE"
 
@@ -298,22 +305,39 @@ class ProviderSignalCollector:
                 continue
 
             for article in result.items:
+                # A live (EXTERNAL_LIVE) hit is an unverified name-match; a
+                # curated hit is a verified demo finding. They are different
+                # signals, and only the verified one carries scoring weight.
+                is_live = article.source_tier == SourceTier.EXTERNAL_LIVE
+                signal_type = SIGNAL_ADVERSE_MEDIA_UNVERIFIED if is_live else SIGNAL_ADVERSE_MEDIA
                 signals.append(
                     RiskSignal(
-                        signal_type=SIGNAL_ADVERSE_MEDIA,
+                        signal_type=signal_type,
                         # Provider hit confidence is not something this system
                         # can measure without NLP (a future phase). 1.0 means
                         # "the provider returned this", and the factor weight
                         # is what expresses how much that is worth.
                         confidence=1.0,
                         source=result.provider,
-                        summary=f"Adverse-media provider '{result.provider}' returned article '{article.external_id}'.",
+                        summary=(
+                            f"{'UNVERIFIED live ' if is_live else ''}adverse-media provider "
+                            f"'{result.provider}' returned article '{article.external_id}'"
+                            + (f": {article.title}" if article.title else "")
+                        ),
                         dedup_key=f"adverse_media:{_short_hash(result.provider, article.external_id)}",
                         occurred_at=article.retrieved_at,
                         entity_ref=f"article:{article.external_id}",
+                        # Carry the full article so the monitoring layer can
+                        # persist it as evidence without re-querying the provider.
                         metadata={
                             "article_id": article.external_id,
                             "source_tier": article.source_tier.value if article.source_tier else None,
+                            "provider_kind": article.provider_kind.value if article.provider_kind else None,
+                            "title": article.title,
+                            "snippet": article.content_snippet,
+                            "url": article.url,
+                            "source_name": article.source_name,
+                            "unverified": is_live,
                         },
                     )
                 )
